@@ -14,10 +14,11 @@ import LandingHero from './components/LandingHero';
 import Scanner from './components/Scanner';
 import Dashboard from './components/Dashboard';
 import EcoGuide from './components/EcoGuide';
+import About from './components/About';
 import type { SpeciesScan } from './db/db';
 
 // Page route type — exported so child components can navigate programmatically
-export type Page = 'home' | 'scanner' | 'dashboard' | 'eco-guide';
+export type Page = 'home' | 'scanner' | 'dashboard' | 'eco-guide' | 'about';
 
 // ── Page transition variants ──────────────────────────────────────────────────
 const pageVariants = {
@@ -129,7 +130,7 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {(['scanner', 'dashboard', 'eco-guide'] as Page[]).map(p => (
+                  {(['scanner', 'dashboard', 'eco-guide', 'about'] as Page[]).map(p => (
                     <button
                       key={p}
                       onClick={() => handleNavigate(p)}
@@ -164,6 +165,12 @@ export default function App() {
           {currentPage === 'eco-guide' && (
             <motion.div key="eco-guide" variants={pageVariants} initial="initial" animate="enter" exit="exit">
               <EcoGuide />
+            </motion.div>
+          )}
+
+          {currentPage === 'about' && (
+            <motion.div key="about" variants={pageVariants} initial="initial" animate="enter" exit="exit">
+              <About onNavigate={handleNavigate} />
             </motion.div>
           )}
         </AnimatePresence>

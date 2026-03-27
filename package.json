@@ -12,6 +12,9 @@
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@runanywhere/web": "^0.1.0-beta.10",
+    "@runanywhere/web-llamacpp": "^0.1.0-beta.10",
+    "@runanywhere/web-onnx": "^0.1.0-beta.10",
     "@tailwindcss/vite": "^4.2.2",
     "dexie": "^4.3.0",
     "framer-motion": "^12.38.0",

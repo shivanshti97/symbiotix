@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { Wifi, WifiOff, Leaf, ScanLine, LayoutDashboard, BarChart3 } from 'lucide-react';
+import { Wifi, WifiOff, Leaf, ScanLine, LayoutDashboard, BarChart3, Home, Info } from 'lucide-react';
 import type { Page } from '../App';
 
 interface NavbarProps {
@@ -13,9 +13,11 @@ interface NavbarProps {
 }
 
 const NAV_ITEMS: { label: string; page: Page; Icon: React.FC<{ size?: number; className?: string }> }[] = [
+  { label: 'Home', page: 'home', Icon: Home },
   { label: 'Scanner', page: 'scanner', Icon: ScanLine },
   { label: 'Dashboard', page: 'dashboard', Icon: LayoutDashboard },
   { label: 'Eco Guide', page: 'eco-guide', Icon: BarChart3 },
+  { label: 'About', page: 'about', Icon: Info },
 ];
 
 export default function Navbar({ currentPage, onNavigate }: NavbarProps) {

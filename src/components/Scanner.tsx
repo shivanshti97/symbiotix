@@ -14,15 +14,15 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Camera, Upload, Zap, CheckCircle, AlertCircle,
-  X, ChevronRight, ScanLine, Cpu, Eye, Volume2, WifiOff
+  X, ChevronRight, ScanLine, Cpu, Eye, Volume2, WifiOff, Mic, MicOff
 } from 'lucide-react';
 import { ParticleField, HelixRing, CoreIcosahedron, OrbitRing } from './three/ParticleScanner';
 import {
-  initModels, analyzeImageBlob, speakSummary,
+  initModels, analyzeImageBlob, speakSummary, startVoiceAssistant,
   areModelsLoaded, type ProgressEvent
 } from '../lib/runAnywhereClient';
 import { saveScan, findEcoSyncWarnings } from '../db/db';
@@ -75,7 +75,6 @@ export default function Scanner({ onScanComplete }: ScannerProps) {
   // Component state
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState('');
   const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
@@ -84,6 +83,12 @@ export default function Scanner({ onScanComplete }: ScannerProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState(areModelsLoaded() ? 'loaded' : 'unloaded');
+
+  // Voice assistant state
+  const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'thinking' | 'speaking' | 'error'>('idle');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceResponse, setVoiceResponse] = useState('');
+  const voiceAbortRef = useRef<AbortController | null>(null);
 
   // Patch console.log to capture RunAnywhere SDK output
   useEffect(() => {
@@ -153,7 +158,6 @@ export default function Scanner({ onScanComplete }: ScannerProps) {
   // ── Full scan pipeline ────────────────────────────────────────────────────
   const runScanPipeline = useCallback(async (blob: Blob, dataUrl: string) => {
     setCapturedImage(dataUrl);
-    setCapturedBlob(blob);
     setConsoleLogs([]);
     setProgress(0);
 
@@ -206,14 +210,38 @@ export default function Scanner({ onScanComplete }: ScannerProps) {
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result as string;
+    // Reset input so same file can be re-uploaded
+    e.target.value = '';
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target?.result as string);
+        reader.onerror = () => reject(new Error('File read failed'));
+        reader.readAsDataURL(file);
+      });
       await runScanPipeline(file, dataUrl);
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      setScanState('error');
+      setCameraError(err.message ?? 'Upload failed');
+    }
   }, [runScanPipeline]);
+
+  // ── Voice assistant handler ───────────────────────────────────────────────
+  const handleVoiceToggle = useCallback(async () => {
+    if (voiceState !== 'idle') {
+      voiceAbortRef.current?.abort();
+      setVoiceState('idle');
+      return;
+    }
+    const ctrl = new AbortController();
+    voiceAbortRef.current = ctrl;
+    await startVoiceAssistant(
+      (t) => setVoiceTranscript(t),
+      (r) => setVoiceResponse(r),
+      (s) => setVoiceState(s),
+      ctrl.signal,
+    );
+  }, [voiceState]);
 
   // ── TTS handler ───────────────────────────────────────────────────────────
   const handleSpeak = useCallback(async () => {
@@ -485,6 +513,72 @@ export default function Scanner({ onScanComplete }: ScannerProps) {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Voice Assistant card */}
+          <div className="glass-card" style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: '0.9rem', color: '#f0fdf4' }}>
+                  Voice Assistant
+                </div>
+                <div style={{ color: '#4b7a63', fontFamily: 'Space Mono, monospace', fontSize: '0.62rem', marginTop: 2 }}>
+                  Ask anything · On-device STT + LLM + TTS
+                </div>
+              </div>
+              <button
+                onClick={handleVoiceToggle}
+                style={{
+                  width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer',
+                  background: voiceState === 'idle'
+                    ? 'linear-gradient(135deg, #059669, #34d399)'
+                    : voiceState === 'error'
+                    ? 'rgba(248,113,113,0.2)'
+                    : 'rgba(52,211,153,0.15)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: voiceState === 'listening' ? '0 0 16px rgba(52,211,153,0.6)' : 'none',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {voiceState === 'idle' || voiceState === 'error'
+                  ? <Mic size={18} color="#fff" />
+                  : <MicOff size={18} color="#34d399" />}
+              </button>
+            </div>
+
+            {voiceState !== 'idle' && (
+              <div style={{
+                padding: '8px 12px', borderRadius: 8,
+                background: 'rgba(52,211,153,0.06)',
+                border: '1px solid rgba(52,211,153,0.12)',
+                fontFamily: 'Space Mono, monospace', fontSize: '0.7rem',
+                color: voiceState === 'error' ? '#f87171' : '#34d399',
+                marginBottom: voiceTranscript ? 8 : 0,
+              }}>
+                {voiceState === 'listening' && '🎙 Listening…'}
+                {voiceState === 'thinking' && '🤔 Thinking…'}
+                {voiceState === 'speaking' && '🔊 Speaking…'}
+                {voiceState === 'error' && '⚠ Voice not supported in this browser'}
+              </div>
+            )}
+
+            {voiceTranscript && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ color: '#4b7a63', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', marginBottom: 3 }}>YOU SAID</div>
+                <div style={{ color: '#a3e6c8', fontFamily: 'Inter, sans-serif', fontSize: '0.8rem', lineHeight: 1.5 }}>{voiceTranscript}</div>
+              </div>
+            )}
+            {voiceResponse && (
+              <div>
+                <div style={{ color: '#4b7a63', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem', marginBottom: 3 }}>SYMBIOTIX</div>
+                <div style={{ color: '#f0fdf4', fontFamily: 'Inter, sans-serif', fontSize: '0.8rem', lineHeight: 1.5 }}>{voiceResponse}</div>
+              </div>
+            )}
+            {voiceState === 'idle' && !voiceTranscript && (
+              <div style={{ color: '#4b7a63', fontFamily: 'Inter, sans-serif', fontSize: '0.78rem' }}>
+                Tap the mic and ask: "What is a Monstera?" or "Tell me about Red Pandas."
+              </div>
+            )}
           </div>
 
           {/* AI Status card */}
